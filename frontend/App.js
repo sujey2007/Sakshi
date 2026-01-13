@@ -6,17 +6,20 @@ import { View, ActivityIndicator } from 'react-native';
 
 // Import Context & Screens
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
-import LoginScreen from './src/screens/auth/LoginScreen'; // Ensure this path is correct
+import LoginScreen from './src/screens/auth/LoginScreen'; 
 import DashboardScreen from './src/screens/dashboard/DashboardScreen';
 import TeamManagementScreen from './src/screens/teams/TeamManagementScreen';
 import UploadScreen from './src/screens/upload/UploadScreen';
+
+// --- AI SCREENS ---
+import LegalChatbot from './src/screens/ai/LegalChatbot'; 
+import ForensicNarrator from './src/screens/ai/ForensicNarrator'; 
 
 const Stack = createStackNavigator();
 
 function Navigation() {
   const { user, isLoading } = useContext(AuthContext);
 
-  // 1. Show a loading spinner while checking for a saved session
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F4F8' }}>
@@ -28,14 +31,18 @@ function Navigation() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
-        // 2. LOGGED IN STACK (User is present)
+        // 2. LOGGED IN STACK
         <>
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
           <Stack.Screen name="TeamManagement" component={TeamManagementScreen} />
           <Stack.Screen name="Upload" component={UploadScreen} />
+          
+          {/* AI Features */}
+          <Stack.Screen name="LegalChatbot" component={LegalChatbot} />
+          <Stack.Screen name="ForensicNarrator" component={ForensicNarrator} />
         </>
       ) : (
-        // 3. AUTH STACK (No user present)
+        // 3. AUTH STACK
         <Stack.Screen name="Login" component={LoginScreen} />
       )}
     </Stack.Navigator>

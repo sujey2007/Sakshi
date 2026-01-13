@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext, useEffect } from 'react';
+﻿import React, { useState, useContext } from 'react';
 import { 
   View, Text, TextInput, StyleSheet, TouchableOpacity, SafeAreaView, 
   KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Alert
@@ -10,34 +10,50 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
+  // --- States ---
   const [name, setName] = useState('');
   const [id, setId] = useState('');
   const [loading, setLoading] = useState(false);
   const [method, setMethod] = useState(null); // 'credential' or 'admin'
+  const [isAddingOfficer, setIsAddingOfficer] = useState(false); // Controls Admin Registration View
   
   const { login } = useContext(AuthContext);
 
-  // --- Logic: Biometric Authentication ---
-  // Triggers sensor immediately and logs in without opening a form
+  // --- Helpers ---
+  const handleIdChange = (text) => {
+    let cleaned = text.replace(/[^0-9A-Z]/g, '');
+    let masked = cleaned.length > 4 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}` : cleaned;
+    setId(masked.toUpperCase());
+  };
+
+  // --- Workflow 1: Officer Login (Goes to Dashboard) ---
+  const handleOfficerLogin = () => {
+    if (!name || !id) return Alert.alert("Required", "Please fill in all fields.");
+    
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      // This updates AuthContext and triggers navigation to Dashboard
+      login({ name: name, officerId: id, role: 'officer' });
+    }, 1000);
+  };
+
   const handleBiometricLogin = async () => {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        Alert.alert("Hardware Error", "Fingerprint sensor not detected or no prints enrolled.");
+        Alert.alert("Hardware Error", "Biometrics not available on this device.");
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Verify Identity for SAKSHI',
-        fallbackLabel: 'Use Passcode',
-        disableDeviceFallback: false,
       });
 
       if (result.success) {
         setLoading(true);
-        // Direct login upon success
         setTimeout(() => {
           setLoading(false);
           login({ name: 'Authorized Officer', officerId: 'BIO-AUTH', role: 'officer' });
@@ -48,24 +64,49 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  const handleIdChange = (text) => {
-    let cleaned = text.replace(/[^0-9A-Z]/g, '');
-    let masked = cleaned.length > 4 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}` : cleaned;
-    setId(masked.toUpperCase());
-  };
-
-  const performManualLogin = () => {
-    if (!name || !id) return Alert.alert("Required", "Please fill in all fields.");
+  // --- Workflow 2: Admin Actions (Stays on Login UI) ---
+  const handleAdminVerify = () => {
+    if (!name || !id) return Alert.alert("Required", "Admin credentials required.");
+    
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      login({ name, officerId: id, role: method === 'admin' ? 'admin' : 'officer' });
-    }, 1000);
+      // UI SWAP: Stay on login screen but show registration form
+      setIsAddingOfficer(true); 
+      setName(''); 
+      setId('');
+    }, 800);
+  };
+
+  const handleRegisterNewOfficer = () => {
+    if (!name || !id) return Alert.alert("Required", "Please enter new officer details.");
+    
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      Alert.alert(
+        "User Added Successfully",
+        `Officer ${name} has been registered to the forensic ledger.`,
+        [
+          { 
+            text: "Return to Login", 
+            onPress: () => {
+              // Reset local state to show initial login screen
+              setIsAddingOfficer(false);
+              setMethod(null);
+              setName('');
+              setId('');
+            } 
+          }
+        ]
+      );
+    }, 1500);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        {/* Header Section */}
         <View style={styles.headerContainer}>
           <View style={styles.blueHeader}>
             <Text style={styles.headerTextMain}>SAKSHI</Text>
@@ -74,63 +115,110 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.shieldBottom} />
         </View>
 
+        {/* Content Section */}
         <View style={styles.content}>
-          <Text style={styles.sectionLabel}>Authorized Access</Text>
-          <Text style={styles.description}>Logging into the immutable forensic ledger.</Text>
+          <Text style={styles.sectionLabel}>
+            {isAddingOfficer ? "Admin: Register New User" : "Authorized Access"}
+          </Text>
+          <Text style={styles.description}>
+            {isAddingOfficer ? "Adding a new officer node to the network." : "Logging into the immutable forensic ledger."}
+          </Text>
 
-          {/* STEP 1: Method Selection */}
           {!method ? (
+            /* PHASE 1: INITIAL SELECTION */
             <View style={styles.choiceContainer}>
               <Text style={styles.choiceTitle}>Select Login Method</Text>
               
-              {/* Credential Key on top as requested */}
               <TouchableOpacity style={styles.choiceBtn} onPress={() => setMethod('credential')}>
                 <MaterialCommunityIcons name="keyboard-outline" size={36} color="#0B2D52" />
                 <Text style={styles.choiceBtnText}>Use Credential Key</Text>
               </TouchableOpacity>
 
-              {/* Fingerprint below */}
               <TouchableOpacity style={styles.choiceBtn} onPress={handleBiometricLogin}>
                 <MaterialCommunityIcons name="fingerprint" size={36} color="#0B2D52" />
                 <Text style={styles.choiceBtnText}>Login with Biometrics</Text>
               </TouchableOpacity>
 
-              {/* Admin Login Flow restored */}
               <TouchableOpacity style={styles.adminLink} onPress={() => setMethod('admin')}>
                 <Text style={styles.adminLinkText}>Administrator Sign In</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            /* STEP 2: Login Form (Admin or Officer Credential) */
+          ) : isAddingOfficer ? (
+            /* PHASE 3: ADMIN REGISTRATION FORM (THEME CONSISTENT) */
             <View style={styles.form}>
-              <Text style={styles.formTitle}>
-                {method === 'admin' ? 'Admin Portal' : 'Officer Credentials'}
-              </Text>
+              <Text style={styles.formTitle}>New Officer Details</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder={method === 'admin' ? "Admin Username" : "Officer Name"}
+                placeholder="Officer Full Name"
+                placeholderTextColor="#999"
                 value={name}
                 onChangeText={setName}
               />
-              
               <TextInput 
                 style={styles.input} 
-                placeholder="Credential Key (XXXX-XXXX)" 
+                placeholder="Assign Credential Key (XXXX-XXXX)" 
+                placeholderTextColor="#999"
                 maxLength={9}
                 value={id}
                 onChangeText={handleIdChange}
               />
 
-              <TouchableOpacity style={styles.signInBtn} onPress={performManualLogin}>
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.signInText}>Secure Login</Text>}
+              <TouchableOpacity style={styles.signInBtn} onPress={handleRegisterNewOfficer}>
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.signInText}>Confirm Registration</Text>}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => setMethod(null)} style={styles.backBtn}>
+              <TouchableOpacity 
+                onPress={() => { setIsAddingOfficer(false); setMethod(null); setName(''); setId(''); }} 
+                style={styles.backBtn}
+              >
+                <Text style={styles.backBtnText}>← Cancel & Exit</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            /* PHASE 2: INPUT CREDENTIALS (ADMIN OR OFFICER) */
+            <View style={styles.form}>
+              <Text style={styles.formTitle}>
+                {method === 'admin' ? 'Verify Administrator' : 'Officer Credentials'}
+              </Text>
+              <TextInput 
+                style={styles.input} 
+                placeholder={method === 'admin' ? "Admin Username" : "Officer Name"}
+                placeholderTextColor="#999"
+                value={name}
+                onChangeText={setName}
+              />
+              <TextInput 
+                style={styles.input} 
+                placeholder="Credential Key (XXXX-XXXX)" 
+                placeholderTextColor="#999"
+                maxLength={9}
+                value={id}
+                onChangeText={handleIdChange}
+              />
+
+              <TouchableOpacity 
+                style={styles.signInBtn} 
+                onPress={method === 'admin' ? handleAdminVerify : handleOfficerLogin}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.signInText}>
+                    {method === 'admin' ? 'Verify Admin' : 'Secure Login'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                onPress={() => { setMethod(null); setName(''); setId(''); }} 
+                style={styles.backBtn}
+              >
                 <Text style={styles.backBtnText}>← Change Method</Text>
               </TouchableOpacity>
             </View>
           )}
 
+          {/* Security Footer */}
           <View style={styles.securityBadge}>
             <MaterialCommunityIcons name="lock-check" size={16} color="#999" />
             <Text style={styles.footerNote}> AES-256 Bit Encryption | Node Verified</Text>
