@@ -1,21 +1,28 @@
-﻿import React, { createContext, useState } from 'react';
+﻿import React, { createContext, useState, useEffect } from 'react';
 
-export const AuthContext = createContext();
+export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  // MUST be null to start at the Login Screen
-  const [user, setUser] = useState(null); 
+  const [user, setUser] = useState(null); // CRITICAL: Must be null
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (userData) => {
-    setUser(userData);
-  };
+  useEffect(() => {
+    // This effect should only check if a user ALREADY exists.
+    // For now, we leave it empty so it ALWAYS goes to login.
+    const checkLoginStatus = async () => {
+      // Simulate a network check
+      setTimeout(() => {
+        setIsLoading(false); 
+      }, 1000);
+    };
+    checkLoginStatus();
+  }, []);
 
-  const logout = () => {
-    setUser(null);
-  };
+  const login = (userData) => setUser(userData);
+  const logout = () => setUser(null);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

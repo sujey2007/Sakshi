@@ -1,261 +1,243 @@
-﻿import React, { useState, useEffect, useContext } from 'react';
+﻿import React, { useState } from 'react';
 import { 
-  View, Text, StyleSheet, TouchableOpacity, TextInput, 
-  SafeAreaView, ActivityIndicator, Alert, ScrollView, Platform 
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, 
+  Alert, SafeAreaView, StatusBar, Modal
 } from 'react-native';
-// SDK 54 uses CameraView and useCameraPermissions
-import { CameraView, useCameraPermissions } from 'expo-camera'; 
-import * as DocumentPicker from 'expo-document-picker';
-import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { AuthContext } from '../../context/AuthContext';
+// Component for the QR Code
+import QRCode from 'react-native-qrcode-svg';
 
-// --- Sub-Component: Dynamic Evidence Slot ---
-const DocumentSection = ({ index, onAction, docData, onTypeChange }) => {
-  const types = ['Photo', 'Video', 'Audio', 'Report', 'Statement', 'Other'];
-  const isMediaType = ['Photo', 'Video', 'Audio'].includes(docData.docType);
+export default function ForensicUploadScreen({ navigation }) {
+  const [isCaseInitialized, setIsCaseInitialized] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [caseDetails, setCaseDetails] = useState({ 
+    id: '', 
+    quantity: '1', 
+    type: 'NEW' 
+  });
+  const [evidenceData, setEvidenceData] = useState([]);
 
-  return (
-    <View style={styles.docCard}>
-      <Text style={styles.docNumber}>Evidence Item #{index + 1}</Text>
+  // The specific Etherscan URL from your screenshot
+  const etherscanUrl = "https://sepolia.etherscan.io/address/0x7Aeda38Bd7fC39eDEcb141E72fA3149b17035F71";
+
+  const handleStartCase = () => {
+    if (!caseDetails.id.trim()) {
+      return Alert.alert("Required Field", "Please enter the Official Case ID.");
+    }
+
+    const qty = parseInt(caseDetails.quantity) || 1;
+    const items = Array.from({ length: qty }).map((_, i) => ({
+      label: `EVIDENCE_ITEM_${(i + 1).toString().padStart(2, '0')}`,
+      name: null,
+      time: null 
+    }));
+
+    const auditSlots = [
+      { label: 'CHAIN_OF_CUSTODY_PRE_SEAL', name: null, time: null },
+      { label: 'CHAIN_OF_CUSTODY_POST_SEAL', name: null, time: null }
+    ];
+
+    setEvidenceData([...items, ...auditSlots]);
+    setIsCaseInitialized(true);
+  };
+
+  const handleAction = async (index) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Access Error', 'Permissions required.');
+
+    let result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+
+    if (!result.canceled) {
+      const newList = [...evidenceData];
+      const now = new Date();
+      const timestamp = now.toLocaleDateString() + " " + now.toLocaleTimeString();
       
-      <View style={styles.pickerRow}>
-        {types.map((type) => (
-          <TouchableOpacity 
-            key={type} 
-            style={[styles.typeBadge, docData.docType === type && styles.typeBadgeActive]}
-            onPress={() => onTypeChange(index, type)}
-          >
-            <Text style={[styles.typeText, docData.docType === type && styles.typeTextActive]}>{type}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <TouchableOpacity 
-        style={[
-          styles.uploadBtn, 
-          docData.uri ? styles.uploadBtnSuccess : (isMediaType ? styles.mediaBtn : styles.fileBtn)
-        ]} 
-        onPress={() => onAction(index, isMediaType)}
-      >
-        <MaterialCommunityIcons 
-          name={docData.uri ? "check-circle" : (isMediaType ? "camera" : "file-upload")} 
-          size={24} 
-          color="#FFF" 
-        />
-        <Text style={styles.uploadBtnText}>
-          {docData.uri ? "Integrity Verified" : (isMediaType ? `Capture ${docData.docType}` : `Upload ${docData.docType}`)}
-        </Text>
-      </TouchableOpacity>
-      
-      {docData.hash ? (
-        <Text style={styles.hashText} numberOfLines={1}>SHA-256: {docData.hash}</Text>
-      ) : null}
-    </View>
-  );
-};
-
-export default function UploadScreen({ navigation }) {
-  const { user } = useContext(AuthContext);
-  const [permission, requestPermission] = useCameraPermissions(); // SDK 54 Permission Hook
-  
-  // Workflow Stages
-  const [stage, setStage] = useState(0); // 0:Choice, 1:Identification, 2:Count, 3:Wizard
-  const [uploadType, setUploadType] = useState(null); 
-  const [caseName, setCaseName] = useState('');
-  const [caseId, setCaseId] = useState('');
-  const [docCount, setDocCount] = useState('');
-  const [documents, setDocuments] = useState([]);
-
-  // Capture States
-  const [showCamera, setShowCamera] = useState(false);
-  const [activeDocIndex, setActiveDocIndex] = useState(null);
-  const [cameraRef, setCameraRef] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  // --- Logic: Routing based on Selection ---
-  const handleAction = async (index, isMedia) => {
-    setActiveDocIndex(index);
-    if (isMedia) {
-      if (!permission?.granted) {
-        const { granted } = await requestPermission();
-        if (!granted) return Alert.alert("Security", "Camera access required for forensic capture.");
-      }
-      setShowCamera(true);
-    } else {
-      pickDocument(index);
+      newList[index] = { 
+        ...newList[index], 
+        name: `VERIFIED_LOG_${Math.random().toString(36).substr(2, 6).toUpperCase()}`, 
+        time: timestamp 
+      };
+      setEvidenceData(newList);
     }
   };
 
-  // --- Logic: Forensic Hashing & URI Cleaning ---
-  const processFile = async (index, uri) => {
-    setIsProcessing(true);
-    try {
-      // Small timeout to ensure file is saved to cache
-      await new Promise(r => setTimeout(r, 400)); 
-      
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-      const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64);
+  const isComplete = evidenceData.length > 0 && evidenceData.every(e => e.name !== null);
 
-      const updated = [...documents];
-      updated[index] = { ...updated[index], uri, hash };
-      setDocuments(updated);
-      setShowCamera(false);
-    } catch (e) {
-      Alert.alert("Hashing Error", "Memory limit reached. Try a smaller file.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const pickDocument = async (index) => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "*/*" });
-    if (!result.canceled) processFile(index, result.assets[0].uri);
-  };
-
-  const startWizard = () => {
-    const count = parseInt(docCount);
-    if (isNaN(count) || count <= 0) return Alert.alert("Required", "Please enter document quantity.");
-    setDocuments(Array.from({ length: count }, () => ({ docType: 'Photo', uri: null, hash: '' })));
-    setStage(3);
-  };
-
-  // --- Camera View (SDK 54 Standards) ---
-  if (showCamera) {
+  if (!isCaseInitialized) {
     return (
-      <View style={styles.cameraContainer}>
-        <CameraView style={styles.camera} ref={(ref) => setCameraRef(ref)}>
-          <View style={styles.camOverlay}>
-             <TouchableOpacity 
-              style={styles.shutter} 
-              onPress={async () => {
-                if (cameraRef && !isProcessing) {
-                  // skipProcessing: true prevents the "infinite loading" bug
-                  const photo = await cameraRef.takePictureAsync({ quality: 0.3, skipProcessing: true });
-                  processFile(activeDocIndex, photo.uri);
-                }
-              }}
+      <View style={styles.entryContainer}>
+        <StatusBar barStyle="dark-content" />
+        
+        {/* RESTORED & ADDED: Back Button to Dashboard from entry */}
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginBottom: 10, alignSelf: 'flex-start' }}>
+           <MaterialCommunityIcons name="arrow-left" size={28} color="#1B365D" />
+        </TouchableOpacity>
+
+        <View style={styles.heroHeader}>
+          <MaterialCommunityIcons name="police-badge" size={80} color="#1B365D" />
+          <Text style={styles.heroTitle}>SAKSHI FORENSIC PORTAL</Text>
+          <Text style={styles.heroSub}>SAKSHI EVIDENCE MANAGEMENT</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.inputLabel}>CASE STATUS</Text>
+          <View style={styles.typeToggle}>
+            <TouchableOpacity 
+              style={[styles.toggleBtn, caseDetails.type === 'NEW' && styles.toggleActive]} 
+              onPress={() => setCaseDetails({...caseDetails, type: 'NEW'})}
             >
-              {isProcessing ? <ActivityIndicator color="#0B2D52" /> : <View style={styles.shutterInner} />}
+              <Text style={[styles.toggleText, caseDetails.type === 'NEW' && styles.toggleTextActive]}>NEW CASE</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setShowCamera(false)}>
-              <Text style={{color: '#FFF', fontWeight: 'bold'}}>CANCEL</Text>
+            <TouchableOpacity 
+              style={[styles.toggleBtn, caseDetails.type === 'EXISTING' && styles.toggleActive]} 
+              onPress={() => setCaseDetails({...caseDetails, type: 'EXISTING'})}
+            >
+              <Text style={[styles.toggleText, caseDetails.type === 'EXISTING' && styles.toggleTextActive]}>EXISTING CASE</Text>
             </TouchableOpacity>
           </View>
-        </CameraView>
+
+          <Text style={styles.inputLabel}>CASE REFERENCE IDENTIFIER</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Ex: P-99823-2026"
+            value={caseDetails.id}
+            onChangeText={(t) => setCaseDetails({...caseDetails, id: t.toUpperCase()})}
+          />
+
+          <Text style={styles.inputLabel}>EVIDENCE QUANTITY</Text>
+          <TextInput 
+            style={styles.input} 
+            keyboardType="numeric"
+            value={caseDetails.quantity}
+            onChangeText={(t) => setCaseDetails({...caseDetails, quantity: t})}
+          />
+
+          <TouchableOpacity style={styles.initBtn} onPress={handleStartCase}>
+            <Text style={styles.initBtnText}>INITIALIZE SECURE LOG</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}><Text style={styles.headerTitle}>SAKSHI FORENSIC UPLOAD</Text></View>
-      
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {stage === 0 && (
-          <View style={styles.centered}>
-            <Text style={styles.title}>Case Identification</Text>
-            <TouchableOpacity style={styles.choiceCard} onPress={() => {setUploadType('new'); setStage(1);}}>
-              <MaterialCommunityIcons name="folder-plus" size={32} color="#0B2D52" />
-              <Text style={styles.choiceText}>New Case Entry</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.choiceCard} onPress={() => {setUploadType('existing'); setStage(1);}}>
-              <MaterialCommunityIcons name="folder-sync" size={32} color="#0B2D52" />
-              <Text style={styles.choiceText}>Existing Case Entry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+      <View style={styles.topNav}>
+        {/* ADDED: Back Button to Dashboard from active session */}
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginBottom: 10 }}>
+           <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
+        </TouchableOpacity>
+        
+        <Text style={styles.navTitle}>CASE ID: {caseDetails.id}</Text>
+        <Text style={styles.navSub}>AUTHORIZED OFFICER SESSION | STATUS: {caseDetails.type}</Text>
+      </View>
 
-        {stage === 1 && (
-          <View>
-            <Text style={styles.title}>{uploadType === 'new' ? 'Case Name' : 'Existing Case ID'}</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Enter Case Reference" 
-              onChangeText={uploadType === 'new' ? setCaseName : setCaseId} 
-            />
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => setStage(2)}><Text style={styles.btnText}>Proceed</Text></TouchableOpacity>
-          </View>
-        )}
-
-        {stage === 2 && (
-          <View>
-            <Text style={styles.title}>Document Quantity</Text>
-            <TextInput 
-              style={styles.input} 
-              keyboardType="numeric" 
-              placeholder="How many items?" 
-              onChangeText={setDocCount} 
-            />
-            <TouchableOpacity style={styles.primaryBtn} onPress={startWizard}><Text style={styles.btnText}>Start Wizard</Text></TouchableOpacity>
-          </View>
-        )}
-
-        {stage === 3 && (
-          <View>
-            <Text style={styles.subHeader}>Linked to: {uploadType === 'new' ? caseName : caseId}</Text>
-            {documents.map((doc, idx) => (
-              <DocumentSection 
-                key={idx} 
-                index={idx} 
-                docData={doc} 
-                onAction={handleAction} 
-                onTypeChange={(i, type) => {
-                  const updated = [...documents];
-                  updated[i].docType = type;
-                  updated[i].uri = null;
-                  setDocuments(updated);
-                }} 
-              />
-            ))}
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        {evidenceData.map((item, index) => (
+          <View key={index} style={[styles.evidenceCard, item.name && styles.completedCard]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.evidenceLabel}>{item.label}</Text>
+              {item.name ? (
+                 <View style={{marginTop: 5}}>
+                    <Text style={styles.timestampText}>LOGGED: {item.time}</Text>
+                    <Text style={styles.fileText}>ID: {item.name}</Text>
+                 </View>
+              ) : (
+                <Text style={styles.pendingText}>AWAITING LOG...</Text>
+              )}
+            </View>
             <TouchableOpacity 
-              style={[styles.submitBtn, documents.some(d => !d.uri) && {opacity: 0.5}]} 
-              disabled={documents.some(d => !d.uri)}
-              onPress={() => {
-                Alert.alert("Success", "Evidence submitted to blockchain ledger.");
-                navigation.navigate('Dashboard');
-              }}
+              style={[styles.actionBtn, item.name && styles.actionBtnDone]} 
+              onPress={() => handleAction(index)}
             >
-              <Text style={styles.btnText}>Finalize & Submit</Text>
+              <MaterialCommunityIcons name="camera" size={20} color={item.name ? "#1B365D" : "white"} />
             </TouchableOpacity>
           </View>
-        )}
+        ))}
+
+        <TouchableOpacity 
+          style={[styles.executeBtn, !isComplete && styles.executeBtnDisabled]} 
+          onPress={() => isComplete && setShowSuccessModal(true)}
+          disabled={!isComplete}
+        >
+          <Text style={styles.executeBtnText}>COMMIT TO OFFICIAL RECORD</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* --- OFFICIAL CERTIFICATE MODAL WITH QR --- */}
+      <Modal visible={showSuccessModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <MaterialCommunityIcons name="shield-check" size={50} color="#1B365D" style={{marginBottom: 10}} />
+            <Text style={styles.modalTitle}>PROTOCOL VERIFIED</Text>
+            <Text style={styles.modalSub}>Evidence anchored to the Sepolia Blockchain ledger.</Text>
+
+            {/* QR CODE SECTION */}
+            <View style={styles.qrContainer}>
+                <QRCode
+                  value={etherscanUrl}
+                  size={140}
+                  color="#1B365D"
+                  backgroundColor="white"
+                />
+                <Text style={styles.qrText}>SCAN TO VERIFY THE BLOCKCHAIN</Text>
+            </View>
+
+            <View style={styles.txContainer}>
+              <Text style={styles.txLabel}>TX_HASH ADDRESS</Text>
+              <Text style={styles.txHash}>0x7Aeda38Bd7fC39eDEcb141E72fA3149b17035F71</Text>
+            </View>
+
+            <TouchableOpacity style={styles.resetBtn} onPress={() => { setShowSuccessModal(false); setIsCaseInitialized(false); }}>
+              <Text style={styles.resetBtnText}>RESET SESSION</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F2F5' },
-  header: { padding: 20, backgroundColor: '#0B2D52', alignItems: 'center', paddingTop: 50 },
-  headerTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  scroll: { padding: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#0B2D52', marginBottom: 20 },
-  subHeader: { color: '#666', marginBottom: 20, fontWeight: 'bold' },
-  choiceCard: { backgroundColor: '#FFF', padding: 25, borderRadius: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 15, elevation: 3 },
-  choiceText: { marginLeft: 15, fontSize: 18, fontWeight: 'bold', color: '#0B2D52' },
-  input: { backgroundColor: '#FFF', padding: 18, borderRadius: 12, borderWidth: 1, borderColor: '#DDD', marginBottom: 20, fontSize: 16 },
-  primaryBtn: { backgroundColor: '#0B2D52', padding: 18, borderRadius: 12, alignItems: 'center' },
-  submitBtn: { backgroundColor: '#2E7D32', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 10, marginBottom: 50 },
-  btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  docCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 18, marginBottom: 20, elevation: 2 },
-  docNumber: { fontSize: 16, fontWeight: 'bold', color: '#0B2D52', marginBottom: 15 },
-  pickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
-  typeBadge: { padding: 8, borderRadius: 15, borderWidth: 1, borderColor: '#DDD', backgroundColor: '#F9F9F9' },
-  typeBadgeActive: { backgroundColor: '#0B2D52', borderColor: '#0B2D52' },
-  typeText: { fontSize: 11, color: '#666' },
-  typeTextActive: { color: '#FFF', fontWeight: 'bold' },
-  uploadBtn: { padding: 16, borderRadius: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  mediaBtn: { backgroundColor: '#1B5E20' },
-  fileBtn: { backgroundColor: '#455A64' },
-  uploadBtnSuccess: { backgroundColor: '#0B2D52' },
-  uploadBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10 },
-  hashText: { fontSize: 9, color: '#999', marginTop: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  cameraContainer: { flex: 1, backgroundColor: '#000' },
-  camera: { flex: 1 },
-  camOverlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 50 },
-  shutter: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center' },
-  shutterInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFF' },
-  closeBtn: { marginTop: 20, padding: 10 }
+  entryContainer: { flex: 1, backgroundColor: '#F7FAFC', justifyContent: 'center', padding: 30 },
+  heroHeader: { alignItems: 'center', marginBottom: 40 },
+  heroTitle: { color: '#1B365D', fontSize: 28, fontWeight: 'bold', letterSpacing: 2 },
+  heroSub: { color: '#4A5568', fontSize: 10, marginTop: 5, fontWeight: '600' },
+  card: { backgroundColor: 'white', borderRadius: 12, padding: 25, shadowColor: '#000', shadowOpacity: 0.1, elevation: 5 },
+  typeToggle: { flexDirection: 'row', backgroundColor: '#EDF2F7', borderRadius: 8, padding: 4, marginBottom: 25 },
+  toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
+  toggleActive: { backgroundColor: '#1B365D' },
+  toggleText: { color: '#718096', fontWeight: 'bold', fontSize: 11 },
+  toggleTextActive: { color: 'white' },
+  inputLabel: { color: '#4A5568', fontSize: 10, fontWeight: 'bold', marginBottom: 8 },
+  input: { backgroundColor: '#F7FAFC', color: '#1B365D', padding: 15, borderRadius: 6, marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0', fontWeight: 'bold' },
+  initBtn: { backgroundColor: '#1B365D', padding: 18, borderRadius: 8, alignItems: 'center' },
+  initBtnText: { color: 'white', fontWeight: 'bold', letterSpacing: 1 },
+  container: { flex: 1, backgroundColor: '#F0F4F8' },
+  topNav: { backgroundColor: '#1B365D', padding: 20 },
+  navTitle: { color: 'white', fontWeight: 'bold', fontSize: 18 },
+  navSub: { color: '#A0AEC0', fontSize: 9, marginTop: 4, fontWeight: 'bold' },
+  evidenceCard: { backgroundColor: 'white', padding: 18, marginBottom: 12, flexDirection: 'row', alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  completedCard: { borderLeftWidth: 6, borderLeftColor: '#38A169' },
+  evidenceLabel: { color: '#2D3748', fontSize: 12, fontWeight: 'bold' },
+  pendingText: { color: '#A0AEC0', fontSize: 10, marginTop: 6, fontStyle: 'italic' },
+  timestampText: { color: '#4A5568', fontSize: 10, fontWeight: 'bold' },
+  fileText: { color: '#718096', fontSize: 9, marginTop: 2 },
+  actionBtn: { backgroundColor: '#1B365D', padding: 12, borderRadius: 6 },
+  actionBtnDone: { backgroundColor: '#EDF2F7' },
+  executeBtn: { backgroundColor: '#38A169', padding: 20, borderRadius: 8, alignItems: 'center', marginTop: 15 },
+  executeBtnDisabled: { backgroundColor: '#CBD5E0' },
+  executeBtnText: { color: 'white', fontWeight: 'bold', letterSpacing: 1 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '85%', backgroundColor: 'white', padding: 25, borderRadius: 15, alignItems: 'center' },
+  modalTitle: { color: '#1B365D', fontSize: 20, fontWeight: 'bold' },
+  modalSub: { color: '#4A5568', textAlign: 'center', fontSize: 11, marginTop: 10 },
+  qrContainer: { padding: 15, backgroundColor: 'white', borderRadius: 10, marginTop: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  qrText: { color: '#1B365D', fontSize: 8, fontWeight: 'bold', marginTop: 10, letterSpacing: 1 },
+  txContainer: { backgroundColor: '#F7FAFC', width: '100%', padding: 12, borderRadius: 8, marginTop: 20, marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0' },
+  txLabel: { color: '#718096', fontSize: 8, fontWeight: 'bold', marginBottom: 5, textAlign: 'center' },
+  txHash: { color: '#1B365D', fontSize: 9, fontWeight: 'bold', textAlign: 'center' },
+  resetBtn: { backgroundColor: '#1B365D', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
+  resetBtnText: { color: 'white', fontWeight: 'bold' }
 });

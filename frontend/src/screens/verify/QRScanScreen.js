@@ -1,5 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function QRScanScreen({ navigation }) {
   const [isScanning, setIsScanning] = useState(true);
@@ -15,6 +16,13 @@ export default function QRScanScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity 
+        style={{ position: 'absolute', top: 50, left: 20, flexDirection: 'row', alignItems: 'center' }} 
+        onPress={() => navigation.goBack()}
+      >
+        <MaterialCommunityIcons name="close-circle" size={30} color="#03dac6" />
+        <Text style={{ color: '#03dac6', marginLeft: 8, fontWeight: 'bold' }}>EXIT GATE</Text>
+      </TouchableOpacity>
       <Text style={styles.header}>Verification Gate</Text>
       <View style={styles.scannerBox}>
         <View style={styles.frame} />
