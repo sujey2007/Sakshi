@@ -4,7 +4,8 @@ import {
   KeyboardAvoidingView, Platform, StyleSheet, ActivityIndicator, SafeAreaView, Alert 
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { GEMINI_API_KEY } from '@env'; // Import the key securely
+import { GEMINI_API_KEY } from '@env'; 
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function LegalChatbot() {
   const navigation = useNavigation();
@@ -25,7 +26,6 @@ export default function LegalChatbot() {
   const sendMessage = async () => {
     if (!inputText.trim()) return;
 
-    // 1. Add User Message immediately
     const userMessage = {
       id: Date.now().toString(),
       text: inputText,
@@ -38,10 +38,9 @@ export default function LegalChatbot() {
     setIsLoading(true);
 
     try {
-      // 2. Call Gemini API
-      // FIX APPLIED HERE: Added '/' after models and switched to 'gemini-1.5-flash' for better limits
+      // Calling Gemini API with the corrected model version
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: {
@@ -67,7 +66,6 @@ export default function LegalChatbot() {
         throw new Error(data.error?.message || 'Network response was not ok');
       }
 
-      // 3. Extract AI Reply
       const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't process that request.";
 
       const aiResponse = {
@@ -83,10 +81,9 @@ export default function LegalChatbot() {
       console.error("Gemini API Error:", error);
       Alert.alert("Error", "Failed to connect to AI Assistant.");
       
-      // Optional: Add an error message to chat
       setMessages((prev) => [...prev, {
         id: Date.now().toString(),
-        text: "System Error: Unable to reach legal database.",
+        text: "System Error: Unable to reach legal database. Please check your API key.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -95,6 +92,7 @@ export default function LegalChatbot() {
     }
   };
 
+  // Scroll to end whenever messages update
   useEffect(() => {
     setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -114,23 +112,28 @@ export default function LegalChatbot() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Centered Professional Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-           <Text style={{color: '#fff', fontSize: 24}}>←</Text>
+           <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Sakshi AI Assistant</Text>
-        <View style={{width: 24}} /> 
+        <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Sakshi AI Assistant</Text>
+            <Text style={styles.headerSubtitle}>Legal & Forensic Intelligence</Text>
+        </View>
+        <View style={{width: 40}} /> 
       </View>
 
-      {/* Chat Area */}
+      {/* Natural Scrolling Chat Area */}
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        keyboardDismissMode="on-drag" // Keyboard dismisses on scroll for better UX
         contentContainerStyle={styles.chatContainer}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        showsVerticalScrollIndicator={true}
       />
 
       {/* Input Area */}
@@ -143,7 +146,7 @@ export default function LegalChatbot() {
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type your legal query..."
+            placeholder="Search BNS/BNSS statutes..."
             placeholderTextColor="#888"
           />
           <TouchableOpacity 
@@ -151,7 +154,11 @@ export default function LegalChatbot() {
             onPress={sendMessage}
             disabled={!inputText.trim() || isLoading}
           >
-            {isLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>Send</Text>}
+            {isLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <MaterialCommunityIcons name="send" size={20} color="#fff" />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -160,29 +167,68 @@ export default function LegalChatbot() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F4F8' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 16, backgroundColor: '#1B365D', paddingTop: Platform.OS === 'android' ? 40 : 16,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, 
+    paddingVertical: 12,
+    backgroundColor: '#1B365D', 
+    paddingTop: Platform.OS === 'android' ? 45 : 12,
+    elevation: 4,
   },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  backButton: { padding: 8 },
-  chatContainer: { padding: 16, paddingBottom: 20 },
-  messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 12, marginBottom: 10 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: '#1B365D', borderBottomRightRadius: 2 },
-  aiBubble: { alignSelf: 'flex-start', backgroundColor: '#fff', borderBottomLeftRadius: 2, borderWidth: 1, borderColor: '#E1E4E8' },
-  messageText: { fontSize: 15 },
+  headerTitleContainer: { alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', letterSpacing: 0.5 },
+  headerSubtitle: { fontSize: 10, color: '#BDC3C7', fontWeight: 'bold', letterSpacing: 1 },
+  backButton: { width: 40 },
+  chatContainer: { padding: 16, paddingBottom: 30 },
+  messageBubble: { maxWidth: '85%', padding: 14, borderRadius: 18, marginBottom: 12 },
+  userBubble: { 
+    alignSelf: 'flex-end', 
+    backgroundColor: '#1B365D', 
+    borderBottomRightRadius: 4,
+    elevation: 2 
+  },
+  aiBubble: { 
+    alignSelf: 'flex-start', 
+    backgroundColor: '#fff', 
+    borderBottomLeftRadius: 4, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0',
+    elevation: 1 
+  },
+  messageText: { fontSize: 15, lineHeight: 22 },
   userText: { color: '#fff' },
-  aiText: { color: '#333' },
+  aiText: { color: '#1E293B' },
   inputContainer: {
-    flexDirection: 'row', padding: 12, backgroundColor: '#fff', 
-    borderTopWidth: 1, borderTopColor: '#E1E4E8', alignItems: 'center',
+    flexDirection: 'row', 
+    padding: 12, 
+    backgroundColor: '#fff', 
+    borderTopWidth: 1, 
+    borderTopColor: '#E2E8F0', 
+    alignItems: 'center',
+    paddingBottom: Platform.OS === 'ios' ? 25 : 12
   },
   input: {
-    flex: 1, backgroundColor: '#F8F9FA', borderRadius: 20, paddingHorizontal: 16, 
-    paddingVertical: 10, marginRight: 10, fontSize: 15, color: '#333', borderWidth: 1, borderColor: '#E1E4E8',
+    flex: 1, 
+    backgroundColor: '#F1F5F9', 
+    borderRadius: 25, 
+    paddingHorizontal: 18, 
+    paddingVertical: 10, 
+    marginRight: 10, 
+    fontSize: 15, 
+    color: '#334155', 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0',
   },
-  sendButton: { backgroundColor: '#1B365D', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
-  sendButtonDisabled: { backgroundColor: '#A0A0A0' },
-  sendButtonText: { color: '#fff', fontWeight: 'bold' },
+  sendButton: { 
+    backgroundColor: '#1B365D', 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  sendButtonDisabled: { backgroundColor: '#94A3B8' },
 });

@@ -1,0 +1,49 @@
+tx = await store.storeEvidence("FINAL_TEST", { gasLimit: 100000 });
+tx = await store.storeEvidence(uniqueHash);
+const uniqueHash = "EVIDENCE_TEST_" + Math.random();
+tx = await store.storeEvidence("FINAL_TEST_HASH");
+store.interface.forEachFunction((f) => console.log(f.name))
+store.address
+store = await ethers.getContractAt("EvidenceStore", "0xdce704e32b764c6537ab024c7fA2600b39dC292f");
+Object.keys(store.functions);
+const tx = await store.storeEvidence("TEST_HASH_123");
+const tx = await store.sealEvidence("TEST_HASH_123", "CASE_999");
+const store = await ethers.getContractAt("EvidenceStore", "0xdce704e32b764c6537ab024c7fA2600b39dC292f");
+const store = await ethers.getContractAt("EvidenceStore", address);
+await tx.wait();
+await store.getEvidence(1);
+https://sepolia.etherscan.io/
+console.log("Verified:", result);
+const result = await store.getEvidence(1);
+const store = await ethers.getContractAt("EvidenceStore", address);
+const address = "0x2C7C1e6E8525f0cd73f4B64C5F95C67362E19C5f";
+console.log("Verified:", result);
+await store.getEvidence(1);
+console.log("Verified:", result);
+const result = await store.getEvidence(1);
+await tx.wait();
+const tx = await store.storeEvidence("Qm_Final_Test_Hash_2026");
+const store = await ethers.getContractAt("EvidenceStore", address);
+const address = "0x2C7C1e6E8525f0cd73f4B64C5F95C67362E19C5f";
+const tx = await store.storeEvidence("Qm_Hackathon_Test_Hash_2026");
+const store = await ethers.getContractAt("EvidenceStore", address);
+const address = "0xdce704e32b764c6537ab024c7fA2600b39dC292f";
+console.log("SUCCESS! Your evidence is now permanent on the blockchain.");
+await tx.wait();
+console.log("Waiting for block confirmation (10-20 seconds)...");
+console.log("Transaction sent! Hash:", tx.hash);
+const tx = await store[functionName](mockHash);
+console.log("Sending hash...");
+const mockHash = "QmMockHash_Hackathon_2026_Test";
+// This creates a permanent, immutable record on the Sepolia blockchain
+// 3. Send the Mock Hash
+console.log("Using Function:", functionName);
+console.log("Contract Found at:", contractAddress);
+console.log("--- Ready to Test ---");
+const functionName = functions[0].name;
+const functions = store.interface.fragments.filter(f => f.type === 'function' && f.stateMutability !== 'view');
+// 2. Automatically find the first 'write' function (like storeEvidence)
+const store = await ethers.getContractAt("EvidenceStore", contractAddress);
+const contractAddress = "0xdce704e32b764c6537ab024c7fA2600b39dC292f";
+// 1. Connect to your deployed contract
+const store = await ethers.getContractAt("EvidenceStore", "0xdce704e32b764c6537ab024c7fA2600b39dC292f");
