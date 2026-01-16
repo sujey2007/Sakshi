@@ -130,6 +130,16 @@ export default function DashboardScreen({ navigation }) {
           
           <Text style={styles.sectionTitle}>Field Operations</Text>
           <View style={styles.grid}>
+            
+            {/* 1. NEW CARD ADDED HERE: Case Diary */}
+            <TouchableOpacity style={styles.card} onPress={() => handleFeatureAccess('CaseDiary')}>
+              <View style={[styles.iconContainer, { backgroundColor: '#1B365D15' }]}>
+                <MaterialCommunityIcons name="notebook-edit" size={30} color="#1B365D" />
+              </View>
+              <Text style={styles.cardTitle}>Case Diary</Text>
+              <Text style={styles.cardDesc}>Timeline & BNSS Vault</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.card} onPress={() => handleFeatureAccess('Upload')}>
               <View style={[styles.iconContainer, { backgroundColor: '#1B365D15' }]}>
                 <MaterialCommunityIcons name="camera-plus" size={30} color="#1B365D" />

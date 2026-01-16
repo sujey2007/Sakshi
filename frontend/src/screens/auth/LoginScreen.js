@@ -11,27 +11,24 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
-  // --- States (Fully Restored) ---
   const [name, setName] = useState('');
   const [id, setId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [method, setMethod] = useState(null); // 'credential' or 'admin'
+  const [method, setMethod] = useState(null); 
   const [isAddingOfficer, setIsAddingOfficer] = useState(false); 
   
   const { login } = useContext(AuthContext);
 
-  // --- Helpers ---
   const handleIdChange = (text) => {
     let cleaned = text.replace(/[^0-9A-Z]/g, '');
     let masked = cleaned.length > 4 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}` : cleaned;
     setId(masked.toUpperCase());
   };
 
-  // --- NEW: Automated Audit Tracker Logic ---
   const recordAuditTrail = async (officerName, officerId, actionType) => {
     const newLog = {
       id: Date.now().toString(),
-      who: `Insp. ${officerName || 'Sabari'} (ID: ${officerId || 'AUTO-GEN'})`,
+      who: `Insp. ${officerName} (ID: ${officerId})`,
       what: actionType,
       when: new Date().toLocaleString() + ' IST',
       where: 'Forensic Terminal 01',
@@ -39,83 +36,67 @@ export default function LoginScreen({ navigation }) {
       status: 'Verified',
       hash: 'SHA256: ' + Math.random().toString(36).substring(2, 10).toUpperCase()
     };
-
     try {
       const existingData = await AsyncStorage.getItem('@sakshi_audit_trail');
       const currentLogs = existingData ? JSON.parse(existingData) : [];
       await AsyncStorage.setItem('@sakshi_audit_trail', JSON.stringify([newLog, ...currentLogs]));
-    } catch (e) {
-      console.error("Audit logging failed", e);
-    }
+    } catch (e) { console.error("Audit log failed", e); }
   };
 
-  // --- Workflow 1: Officer Login (RESTORED & FIXED) ---
+  // --- OFFICER LOGIN ---
   const handleOfficerLogin = async () => {
-    const finalName = name || "Sabari"; // Allow quick login for demo
-    const finalId = id || "9942-1234";
-
+    if (!name || !id) return Alert.alert("Required", "Enter Name & Key.");
     setLoading(true);
-    // Record action first
-    await recordAuditTrail(finalName, finalId, 'System Login');
-
+    await recordAuditTrail(name, id, 'System Login');
     setTimeout(() => {
       setLoading(false);
-      login({ name: finalName, officerId: finalId, role: 'officer' });
-      // Direct Navigation Reset to ensure jump happens
+      login({ name, officerId: id, role: 'officer' });
       navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
-    }, 1000);
-  };
-
-  const handleBiometricLogin = async () => {
-    try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-      if (!hasHardware || !isEnrolled) {
-        Alert.alert("Hardware Error", "Biometrics not available on this device.");
-        return;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Verify Identity for SAKSHI',
-      });
-
-      if (result.success) {
-        setLoading(true);
-        await recordAuditTrail('Authorized Officer', 'BIO-AUTH', 'Biometric Login');
-        
-        setTimeout(() => {
-          setLoading(false);
-          login({ name: 'Authorized Officer', officerId: 'BIO-AUTH', role: 'officer' });
-          navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
-        }, 1000);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Biometric authentication failed.");
-    }
-  };
-
-  // --- Workflow 2: Admin Actions (FULLY RESTORED) ---
-  const handleAdminVerify = () => {
-    if (!name || !id) return Alert.alert("Required", "Admin credentials required.");
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setIsAddingOfficer(true); 
-      setName(''); 
-      setId('');
     }, 800);
   };
 
-  const handleRegisterNewOfficer = () => {
-    if (!name || !id) return Alert.alert("Required", "Please enter new officer details.");
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert("User Added Successfully", `Officer ${name} has been registered.`, [
-          { text: "Return to Login", onPress: () => { setIsAddingOfficer(false); setMethod(null); setName(''); setId(''); } }
-      ]);
-    }, 1500);
+  // --- BIOMETRIC LOGIN ---
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'SAKSHI Bio-Auth' });
+      if (result.success) {
+        setLoading(true);
+        await recordAuditTrail('Authorized Officer', 'BIO-AUTH', 'Biometric Login');
+        setTimeout(() => {
+          setLoading(false);
+          login({ name: 'Auth Officer', officerId: 'BIO-AUTH', role: 'officer' });
+          navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
+        }, 800);
+      }
+    } catch (error) { Alert.alert("Error", "Auth failed."); }
+  };
+
+  // --- MODIFIED ADMIN VERIFY: ALLOWS ANY ID ---
+  const handleAdminVerify = async () => {
+    // Check if fields are empty, otherwise allow any input
+    if (name && id) {
+      setLoading(true);
+      await recordAuditTrail(name, id, 'Admin Login Bypass');
+      setTimeout(() => {
+        setLoading(false);
+        // Grant admin role to the session
+        login({ name: name, officerId: id, role: 'admin' });
+        // Navigate to AdminDashboard
+        navigation.reset({ index: 0, routes: [{ name: 'AdminDashboard' }] });
+      }, 800);
+    } else {
+      Alert.alert("Input Required", "Please enter a Name and Key to login.");
+    }
+  };
+
+  const onMainButtonPress = () => {
+    if (isAddingOfficer) {
+      // Logic for registration
+    } else if (method === 'admin') {
+      handleAdminVerify();
+    } else {
+      handleOfficerLogin();
+    }
   };
 
   return (
@@ -131,7 +112,7 @@ export default function LoginScreen({ navigation }) {
 
         <View style={styles.content}>
           <Text style={styles.sectionLabel}>
-            {isAddingOfficer ? "Admin: Register New User" : "Authorized Access"}
+            {isAddingOfficer ? "Admin: Register New User" : (method === 'admin' ? "Administrator Login" : "Authorized Access")}
           </Text>
 
           {!method ? (
@@ -150,10 +131,10 @@ export default function LoginScreen({ navigation }) {
             </View>
           ) : (
             <View style={styles.form}>
-              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
-              <TextInput style={styles.input} placeholder="Credential Key (XXXX-XXXX)" maxLength={9} value={id} onChangeText={handleIdChange} />
-              <TouchableOpacity style={styles.signInBtn} onPress={method === 'admin' && !isAddingOfficer ? handleAdminVerify : isAddingOfficer ? handleRegisterNewOfficer : handleOfficerLogin}>
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.signInText}>{isAddingOfficer ? 'Confirm' : 'Secure Login'}</Text>}
+              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} autoCapitalize="none" />
+              <TextInput style={styles.input} placeholder="Key (XXXX-XXXX)" maxLength={9} value={id} onChangeText={handleIdChange} />
+              <TouchableOpacity style={styles.signInBtn} onPress={onMainButtonPress}>
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.signInText}>Secure Login</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => {setMethod(null); setIsAddingOfficer(false);}} style={styles.backBtn}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
             </View>

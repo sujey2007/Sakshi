@@ -3,10 +3,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { AuthProvider } from './src/context/AuthContext';
 
-// --- IMPORT ALL SCREENS (Restored Paths) ---
+// --- IMPORT ALL SCREENS ---
 import LoginScreen from './src/screens/auth/LoginScreen';
 import DashboardScreen from './src/screens/dashboard/DashboardScreen';
+import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen'; 
 import AuditScreen from './src/screens/LogAudit/AuditScreen'; 
+import CaseDiaryScreen from './src/screens/caseDiary/CaseDiaryScreen';
 import LegalChatbot from './src/screens/ai/LegalChatbot';
 import ForensicNarrator from './src/screens/ai/ForensicNarrator';
 import TeamManagementScreen from './src/screens/teams/TeamManagementScreen';
@@ -19,14 +21,12 @@ export default function App() {
   return (
     <AuthProvider>
       <NavigationContainer>
-        {/* Using a persistent stack to prevent accidental resets to Login */}
         <Stack.Navigator 
           initialRouteName="Login"
           screenOptions={{
             headerStyle: { backgroundColor: '#1B365D' },
             headerTintColor: '#fff',
             headerTitleStyle: { fontWeight: 'bold' },
-            // Disable gestures to prevent accidental "swipe back" to login
             gestureEnabled: false 
           }}
         >
@@ -44,13 +44,24 @@ export default function App() {
             options={{ headerShown: false }} 
           />
 
+          {/* ADMIN DASHBOARD */}
+          <Stack.Screen 
+            name="AdminDashboard" 
+            component={AdminDashboardScreen} 
+            options={{ headerShown: false }} 
+          />
+
           {/* SYSTEM TRACKER: AUDIT TRAIL */}
           <Stack.Screen 
             name="Audit" 
             component={AuditScreen} 
-            options={{ 
-              headerShown: false, // Uses custom header in AuditScreen.js
-            }} 
+            options={{ headerShown: false }} 
+          />
+          
+          <Stack.Screen 
+            name="CaseDiary" 
+            component={CaseDiaryScreen} 
+            options={{ headerShown: false }} 
           />
 
           {/* FORENSIC INTELLIGENCE: AI TOOLS */}
