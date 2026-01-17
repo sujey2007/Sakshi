@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, 
-  ScrollView, Dimensions, PanResponder, Modal, TextInput, Alert 
+  ScrollView, Dimensions, Modal, TextInput, Alert 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
@@ -22,15 +22,6 @@ export default function DashboardScreen({ navigation }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [accessKey, setAccessKey] = useState('');
   const [targetScreen, setTargetScreen] = useState(null);
-
-  const resetTimer = () => setSecondsLeft(IDLE_TIME);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponderCapture: () => { resetTimer(); return false; },
-      onMoveShouldSetPanResponderCapture: () => { resetTimer(); return false; },
-    })
-  ).current;
 
   // --- LOGOUT LOGIC ---
   const handleLogout = () => {
@@ -61,16 +52,11 @@ export default function DashboardScreen({ navigation }) {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // --- SCROLL LOGIC ---
-  const scrollDown = () => scrollViewRef.current?.scrollToEnd({ animated: true });
-  const scrollUp = () => scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-
   const handleFeatureAccess = (screenName) => {
     setTargetScreen(screenName);
     setIsVerifying(true); 
   };
 
-  // --- AUDIT LOG ENTRY ---
   const confirmAccess = async () => {
     if (accessKey.length > 0) {
       const usageLog = {
@@ -101,7 +87,7 @@ export default function DashboardScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
+    <SafeAreaView style={styles.container}>
       {/* BRANDED HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
@@ -130,8 +116,6 @@ export default function DashboardScreen({ navigation }) {
           
           <Text style={styles.sectionTitle}>Field Operations</Text>
           <View style={styles.grid}>
-            
-            {/* 1. NEW CARD ADDED HERE: Case Diary */}
             <TouchableOpacity style={styles.card} onPress={() => handleFeatureAccess('CaseDiary')}>
               <View style={[styles.iconContainer, { backgroundColor: '#1B365D15' }]}>
                 <MaterialCommunityIcons name="notebook-edit" size={30} color="#1B365D" />
@@ -188,15 +172,8 @@ export default function DashboardScreen({ navigation }) {
           </View>
 
         </ScrollView>
-
-        <View style={styles.paddleContainer}>
-          <TouchableOpacity style={styles.paddle} onPress={scrollUp}><MaterialCommunityIcons name="chevron-up" size={28} color="#FFF" /></TouchableOpacity>
-          <View style={{ height: 10 }} />
-          <TouchableOpacity style={styles.paddle} onPress={scrollDown}><MaterialCommunityIcons name="chevron-down" size={28} color="#FFF" /></TouchableOpacity>
-        </View>
       </View>
 
-      {/* Identity Gate Modal (RESTORED UI) */}
       <Modal visible={isVerifying} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.gateCard}>
@@ -234,15 +211,13 @@ const styles = StyleSheet.create({
   headerValue: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   timerBadge: { backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
   timerText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
-  scrollContent: { padding: 20, paddingBottom: 150 },
+  scrollContent: { padding: 20, paddingBottom: 80 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 15 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: { backgroundColor: '#FFF', width: (width - 55) / 2, padding: 15, borderRadius: 18, marginBottom: 15, elevation: 3 },
   iconContainer: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   cardTitle: { fontSize: 14, fontWeight: 'bold', color: '#1B365D' },
   cardDesc: { fontSize: 11, color: '#777', marginTop: 4 },
-  paddleContainer: { position: 'absolute', right: 20, bottom: 40, zIndex: 999 },
-  paddle: { backgroundColor: 'rgba(27, 54, 93, 0.9)', padding: 10, borderRadius: 30, elevation: 10 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
   gateCard: { backgroundColor: 'white', width: '85%', padding: 30, borderRadius: 25, alignItems: 'center' },
   gateTitle: { fontSize: 22, fontWeight: 'bold', color: '#1B365D', marginTop: 15 },

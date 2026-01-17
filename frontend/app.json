@@ -14,6 +14,16 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "ios": {
+      "bundleIdentifier": "com.sujey_123.sakshiforensic",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "SAKSHI requires FaceID to verify authorized forensic personnel."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -32,11 +42,6 @@
     },
     "updates": {
       "url": "https://u.expo.dev/5986a78c-1338-4988-bae5-dae4fb7666ff"
-    },
-    "ios": {
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
     }
   }
 }

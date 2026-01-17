@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext } from 'react';
+﻿import React, { useState, useContext, useEffect } from 'react';
 import { 
   View, Text, TextInput, StyleSheet, TouchableOpacity, SafeAreaView, 
   KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Alert
@@ -15,10 +15,10 @@ export default function LoginScreen({ navigation }) {
   const [id, setId] = useState('');
   const [loading, setLoading] = useState(false);
   const [method, setMethod] = useState(null); 
-  const [isAddingOfficer, setIsAddingOfficer] = useState(false); 
   
   const { login } = useContext(AuthContext);
 
+  // --- Helpers ---
   const handleIdChange = (text) => {
     let cleaned = text.replace(/[^0-9A-Z]/g, '');
     let masked = cleaned.length > 4 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}` : cleaned;
@@ -31,8 +31,6 @@ export default function LoginScreen({ navigation }) {
       who: `Insp. ${officerName} (ID: ${officerId})`,
       what: actionType,
       when: new Date().toLocaleString() + ' IST',
-      where: 'Forensic Terminal 01',
-      why: 'Authorized Session Start',
       status: 'Verified',
       hash: 'SHA256: ' + Math.random().toString(36).substring(2, 10).toUpperCase()
     };
@@ -43,59 +41,71 @@ export default function LoginScreen({ navigation }) {
     } catch (e) { console.error("Audit log failed", e); }
   };
 
-  // --- OFFICER LOGIN ---
+  // --- Login Handlers ---
   const handleOfficerLogin = async () => {
-    if (!name || !id) return Alert.alert("Required", "Enter Name & Key.");
+    if (!name || !id) return Alert.alert("Required", "Please enter Name and Key.");
     setLoading(true);
-    await recordAuditTrail(name, id, 'System Login');
-    setTimeout(() => {
+    try {
+      const storedUsers = await AsyncStorage.getItem('@sakshi_registered_officers');
+      const registeredUsers = storedUsers ? JSON.parse(storedUsers) : [];
+      
+      // Check Name and ID against local Admin DB
+      const isValid = registeredUsers.find(u => u.name === name && u.id === id);
+
+      if (isValid) {
+        await recordAuditTrail(name, id, 'Officer Login');
+        setTimeout(() => {
+          setLoading(false);
+          login({ name, officerId: id, role: 'officer' });
+          navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
+        }, 800);
+      } else {
+        setLoading(false);
+        Alert.alert("Invalid User", "The Name or Key entered does not match our authorized registry.");
+      }
+    } catch (e) {
       setLoading(false);
-      login({ name, officerId: id, role: 'officer' });
-      navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
-    }, 800);
+      Alert.alert("Error", "Local Database inaccessible.");
+    }
   };
 
-  // --- BIOMETRIC LOGIN ---
-  const handleBiometricLogin = async () => {
+  const handleBiometricAuth = async (typeLabel) => {
     try {
-      const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'SAKSHI Bio-Auth' });
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (!hasHardware || !isEnrolled) {
+        return Alert.alert("Hardware Error", `${typeLabel} is not set up on this device.`);
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `SAKSHI ${typeLabel} Verification`,
+        fallbackLabel: 'Use Passcode',
+      });
+
       if (result.success) {
         setLoading(true);
-        await recordAuditTrail('Authorized Officer', 'BIO-AUTH', 'Biometric Login');
+        await recordAuditTrail(`${typeLabel} User`, 'BIO-AUTH', `${typeLabel} Login`);
         setTimeout(() => {
           setLoading(false);
           login({ name: 'Auth Officer', officerId: 'BIO-AUTH', role: 'officer' });
           navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
         }, 800);
       }
-    } catch (error) { Alert.alert("Error", "Auth failed."); }
+    } catch (error) { Alert.alert("Error", "Authentication failed."); }
   };
 
-  // --- MODIFIED ADMIN VERIFY: ALLOWS ANY ID ---
   const handleAdminVerify = async () => {
-    // Check if fields are empty, otherwise allow any input
-    if (name && id) {
+    if (name === 'hackhive' && id === '24680') {
       setLoading(true);
-      await recordAuditTrail(name, id, 'Admin Login Bypass');
+      await recordAuditTrail('hackhive', '24680', 'Admin Login');
       setTimeout(() => {
         setLoading(false);
-        // Grant admin role to the session
-        login({ name: name, officerId: id, role: 'admin' });
-        // Navigate to AdminDashboard
+        login({ name: 'hackhive', officerId: '24680', role: 'admin' });
         navigation.reset({ index: 0, routes: [{ name: 'AdminDashboard' }] });
       }, 800);
     } else {
-      Alert.alert("Input Required", "Please enter a Name and Key to login.");
-    }
-  };
-
-  const onMainButtonPress = () => {
-    if (isAddingOfficer) {
-      // Logic for registration
-    } else if (method === 'admin') {
-      handleAdminVerify();
-    } else {
-      handleOfficerLogin();
+      Alert.alert("Invalid Admin", "Administrator Name or Security Key is incorrect.");
     }
   };
 
@@ -112,19 +122,25 @@ export default function LoginScreen({ navigation }) {
 
         <View style={styles.content}>
           <Text style={styles.sectionLabel}>
-            {isAddingOfficer ? "Admin: Register New User" : (method === 'admin' ? "Administrator Login" : "Authorized Access")}
+            {method === 'admin' ? "Admin Portal" : "Authorized Access"}
           </Text>
 
           {!method ? (
             <View style={styles.choiceContainer}>
+              {/* CARD 1: CREDENTIALS */}
               <TouchableOpacity style={styles.choiceBtn} onPress={() => setMethod('credential')}>
                 <MaterialCommunityIcons name="keyboard-outline" size={36} color="#0B2D52" />
                 <Text style={styles.choiceBtnText}>Use Credential Key</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.choiceBtn} onPress={handleBiometricLogin}>
+
+            
+
+              {/* CARD 3: BIOMETRICS/TOUCHID */}
+              <TouchableOpacity style={styles.choiceBtn} onPress={() => handleBiometricAuth('Biometrics')}>
                 <MaterialCommunityIcons name="fingerprint" size={36} color="#0B2D52" />
                 <Text style={styles.choiceBtnText}>Login with Biometrics</Text>
               </TouchableOpacity>
+
               <TouchableOpacity style={styles.adminLink} onPress={() => setMethod('admin')}>
                 <Text style={styles.adminLinkText}>Administrator Sign In</Text>
               </TouchableOpacity>
@@ -132,11 +148,17 @@ export default function LoginScreen({ navigation }) {
           ) : (
             <View style={styles.form}>
               <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} autoCapitalize="none" />
-              <TextInput style={styles.input} placeholder="Key (XXXX-XXXX)" maxLength={9} value={id} onChangeText={handleIdChange} />
-              <TouchableOpacity style={styles.signInBtn} onPress={onMainButtonPress}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Key" 
+                value={id} 
+                onChangeText={method === 'admin' ? setId : handleIdChange} 
+                secureTextEntry={method === 'admin'} 
+              />
+              <TouchableOpacity style={styles.signInBtn} onPress={method === 'admin' ? handleAdminVerify : handleOfficerLogin}>
                 {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.signInText}>Secure Login</Text>}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => {setMethod(null); setIsAddingOfficer(false);}} style={styles.backBtn}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setMethod(null)} style={styles.backBtn}><Text style={styles.backBtnText}>← Back</Text></TouchableOpacity>
             </View>
           )}
 

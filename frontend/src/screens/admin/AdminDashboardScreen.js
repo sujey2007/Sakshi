@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, 
   ScrollView, Dimensions, Modal, TextInput, Alert, FlatList 
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext'; 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -48,14 +49,23 @@ export default function AdminDashboardScreen({ navigation }) {
 
   // --- REGISTRATION FORM STATE ---
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('');
-  const [newBadge, setNewBadge] = useState('');
+  const [newKey, setNewKey] = useState('');
 
-  const handleLogout = () => {
-    Alert.alert("Terminate Session", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Terminate", onPress: async () => { if (logout) await logout(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); }, style: "destructive" }
-    ]);
+  // --- HELPER: FORMAT KEY (Matches Login Screen Logic) ---
+  const handleKeyChange = (text) => {
+    let cleaned = text.replace(/[^0-9A-Z]/g, '');
+    let masked = cleaned.length > 4 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4, 8)}` : cleaned;
+    setNewKey(masked.toUpperCase());
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (logout) await logout();
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    } catch (error) {
+      console.log("Logout Error:", error);
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
   };
 
   const startAction = (action) => {
@@ -64,22 +74,20 @@ export default function AdminDashboardScreen({ navigation }) {
   };
 
   const confirmAccess = () => {
-    if (accessKey.trim().length > 0) {
+    // ENFORCED MASTER KEY: 24680
+    if (accessKey === '24680') {
       setIsVerifying(false); 
-      // The useEffect below will handle opening the feature modal
     } else {
-      Alert.alert("Required", "Please enter any key to verify root access.");
+      Alert.alert("Security Violation", "Invalid Master Key.");
     }
   };
 
-  // TRIGGER FEATURE MODAL AFTER GATE CLOSES
   useEffect(() => {
     if (!isVerifying && pendingAction) {
       const action = pendingAction;
       setPendingAction(null);
       setAccessKey('');
       
-      // Essential Delay for Mobile UI Rendering
       setTimeout(() => {
         if (action === 'users') setShowUsers(true);
         if (action === 'cases') setShowCases(true);
@@ -89,10 +97,31 @@ export default function AdminDashboardScreen({ navigation }) {
     }
   }, [isVerifying, pendingAction]);
 
-  const handleEnrollPersonnel = () => {
-    if (!newName || !newRole || !newBadge) return Alert.alert("Error", "Fields required.");
-    setPersonnel([{ id: Date.now().toString(), name: newName, role: newRole, badge: newBadge.toUpperCase(), status: 'Offline' }, ...personnel]);
-    setNewName(''); setNewRole(''); setNewBadge(''); setShowRegistration(false);
+  // --- PERSISTENT REGISTRATION LOGIC ---
+  const handleEnrollPersonnel = async () => {
+    if (!newName || !newKey) return Alert.alert("Error", "Name and Key are required.");
+    
+    try {
+      const existingData = await AsyncStorage.getItem('@sakshi_registered_officers');
+      const users = existingData ? JSON.parse(existingData) : [];
+      
+      // Check for duplicate
+      const exists = users.find(u => u.name === newName || u.id === newKey);
+      if (exists) {
+        return Alert.alert("Error", "Officer with this Name or Key already exists.");
+      }
+
+      const updatedUsers = [...users, { name: newName, id: newKey }];
+      await AsyncStorage.setItem('@sakshi_registered_officers', JSON.stringify(updatedUsers));
+      
+      // Update local UI list temporarily
+      setPersonnel([{ id: Date.now().toString(), name: newName, role: 'Field Officer', badge: newKey, status: 'Active' }, ...personnel]);
+      
+      Alert.alert("Success", `Officer ${newName} authorized. Credential Key: ${newKey}`);
+      setNewName(''); setNewKey(''); setShowRegistration(false);
+    } catch (e) {
+      Alert.alert("Registry Error", "Failed to save to local database.");
+    }
   };
 
   return (
@@ -101,7 +130,7 @@ export default function AdminDashboardScreen({ navigation }) {
         <View style={styles.headerTopRow}>
           <View style={styles.headerSide}>
             <Text style={styles.adminBadge}>ROOT PRIVILEGE</Text>
-            <Text style={styles.headerValue}>{user?.name || "admin"}</Text>
+            <Text style={styles.headerValue}>hackhive</Text>
           </View>
           <View style={styles.headerCenter}>
             <Text style={styles.brandTitle}>SAKSHI</Text>
@@ -116,7 +145,6 @@ export default function AdminDashboardScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.sectionTitle}>Administrator Controls</Text>
         <View style={styles.grid}>
-          {/* CARDS */}
           <TouchableOpacity style={styles.card} onPress={() => startAction('register')}>
             <View style={[styles.iconBox, {backgroundColor: '#E8F5E9'}]}>
               <MaterialCommunityIcons name="account-plus" size={28} color="#2E7D32" />
@@ -156,20 +184,60 @@ export default function AdminDashboardScreen({ navigation }) {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* --- MASTER OVERRIDE MODAL --- */}
+      {/* --- MASTER KEY MODAL --- */}
       <Modal visible={isVerifying} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.gateCard}>
             <MaterialCommunityIcons name="shield-key" size={60} color="#0B2D52" />
             <Text style={styles.gateTitle}>Master Override</Text>
-            <TextInput style={styles.gateInput} placeholder="ANY KEY" secureTextEntry onChangeText={setAccessKey} value={accessKey} placeholderTextColor="#999" />
-            <TouchableOpacity style={styles.confirmBtn} onPress={confirmAccess}><Text style={styles.confirmBtnText}>GRANT ACCESS</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => {setIsVerifying(false); setPendingAction(null);}} style={{marginTop: 15}}><Text style={{color: '#777'}}>Cancel</Text></TouchableOpacity>
+            <TextInput 
+              style={styles.gateInput} 
+              placeholder="ENTER SECURITY KEY" 
+              secureTextEntry 
+              onChangeText={setAccessKey} 
+              value={accessKey} 
+              placeholderTextColor="#999" 
+            />
+            <TouchableOpacity style={styles.confirmBtn} onPress={confirmAccess}>
+              <Text style={styles.confirmBtnText}>GRANT ACCESS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => {setIsVerifying(false); setPendingAction(null);}} style={{marginTop: 15}}>
+              <Text style={{color: '#777'}}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* --- PERSONNEL LIST MODAL --- */}
+      {/* --- REGISTRATION MODAL --- */}
+      <Modal visible={showRegistration} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.gateCard}>
+            <Text style={styles.gateTitle}>Register Personnel</Text>
+            <TextInput 
+              style={styles.gateInput} 
+              placeholder="Full Name" 
+              value={newName} 
+              onChangeText={setNewName} 
+              placeholderTextColor="#999" 
+            />
+            <TextInput 
+              style={styles.gateInput} 
+              placeholder="Credential Key" 
+              value={newKey} 
+              onChangeText={handleKeyChange} // Updated to use the formatter
+              placeholderTextColor="#999" 
+            />
+            <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#2E7D32'}]} onPress={handleEnrollPersonnel}>
+              <Text style={styles.confirmBtnText}>AUTHORIZE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowRegistration(false)} style={{marginTop: 15}}>
+              <Text style={{color: '#777'}}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- RENDERED PERSONNEL, CASES, AND CUSTODY MODALS --- */}
       <Modal visible={showUsers} animationType="slide">
         <SafeAreaView style={{flex: 1, backgroundColor: '#F5F7FA'}}>
           <View style={styles.modalHeader}>
@@ -186,7 +254,6 @@ export default function AdminDashboardScreen({ navigation }) {
         </SafeAreaView>
       </Modal>
 
-      {/* --- CASES MODAL --- */}
       <Modal visible={showCases} animationType="slide">
         <SafeAreaView style={{flex: 1, backgroundColor: '#F5F7FA'}}>
           <View style={styles.modalHeader}>
@@ -202,7 +269,6 @@ export default function AdminDashboardScreen({ navigation }) {
         </SafeAreaView>
       </Modal>
 
-      {/* --- CUSTODY MODAL --- */}
       <Modal visible={showCustody} animationType="slide">
         <SafeAreaView style={{flex: 1, backgroundColor: '#F5F7FA'}}>
           <View style={styles.modalHeader}>
@@ -216,20 +282,6 @@ export default function AdminDashboardScreen({ navigation }) {
             </View>
           )} />
         </SafeAreaView>
-      </Modal>
-
-      {/* --- REGISTRATION MODAL --- */}
-      <Modal visible={showRegistration} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.gateCard}>
-            <Text style={styles.gateTitle}>Register Personnel</Text>
-            <TextInput style={styles.gateInput} placeholder="Full Name" value={newName} onChangeText={setNewName} placeholderTextColor="#999" />
-            <TextInput style={styles.gateInput} placeholder="Role" value={newRole} onChangeText={setNewRole} placeholderTextColor="#999" />
-            <TextInput style={styles.gateInput} placeholder="Badge ID" value={newBadge} onChangeText={setNewBadge} placeholderTextColor="#999" />
-            <TouchableOpacity style={[styles.confirmBtn, {backgroundColor: '#2E7D32'}]} onPress={handleEnrollPersonnel}><Text style={styles.confirmBtnText}>AUTHORIZE</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowRegistration(false)} style={{marginTop: 15}}><Text style={{color: '#777'}}>Cancel</Text></TouchableOpacity>
-          </View>
-        </View>
       </Modal>
     </SafeAreaView>
   );
